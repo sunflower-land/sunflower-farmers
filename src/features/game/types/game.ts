@@ -1222,10 +1222,13 @@ export type Animal = {
   multiplier?: number;
 };
 
-export type AnimalBuilding = {
+export type Building = {
   level: number;
-  animals: Record<string, Animal>;
 };
+
+export type AnimalBuilding = {
+  animals: Record<string, Animal>;
+} & Building;
 
 export interface GameState {
   home: Home;
@@ -1400,6 +1403,8 @@ export interface GameState {
   desert: Desert;
 
   experiments: ExperimentName[];
+
+  waterWell: Building;
   henHouse: AnimalBuilding;
   barn: AnimalBuilding;
 
