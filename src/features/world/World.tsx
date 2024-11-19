@@ -146,7 +146,6 @@ export const MMO: React.FC<MMOProps> = ({ isCommunity }) => {
       <PhaserComponent
         mmoService={mmoService}
         isCommunity={isCommunity}
-        inventory={gameState.context.state.inventory}
         route={name as SceneId}
       />
 

@@ -41,6 +41,7 @@ import {
   PlazaShaders,
   getPlazaShaderSetting,
 } from "lib/utils/hooks/usePlazaShader";
+import { EventManager } from "../managers/EventManager";
 
 export type NPCBumpkin = {
   x: number;
@@ -52,11 +53,13 @@ export type NPCBumpkin = {
   hideLabel?: boolean;
 };
 
-// 3 Times per second send position to server
-const SEND_PACKET_RATE = 10;
-const NAME_TAG_OFFSET_PX = 12;
-
-const WALKING_SPEED = 50;
+export const CONFIG = {
+  SEND_PACKET_RATE: 10,
+  NAME_TAG_OFFSET_PX: 12,
+  WALKING_SPEED: 50,
+  PREDICTION_TIME: 0.05,
+  INTERPOLATION_RATE: 0.065,
+};
 
 type BaseSceneOptions = {
   name: SceneId;
@@ -94,6 +97,7 @@ export const FACTION_NAME_COLORS: Record<FactionName, string> = {
 };
 
 export abstract class BaseScene extends Phaser.Scene {
+  private eventManager: EventManager | undefined;
   abstract sceneId: SceneId;
   eventListener?: (event: EventObject) => void;
 
@@ -102,6 +106,8 @@ export abstract class BaseScene extends Phaser.Scene {
   public isCameraFading = false;
   private options: Required<BaseSceneOptions>;
 
+  private clothingCache: { [sessionId: string]: any } = {};
+
   public map: Phaser.Tilemaps.Tilemap = {} as Phaser.Tilemaps.Tilemap;
 
   npcs: Partial<Record<NPCName, BumpkinContainer>> = {};
@@ -109,7 +115,11 @@ export abstract class BaseScene extends Phaser.Scene {
   currentPlayer: BumpkinContainer | undefined;
   isFacingLeft = false;
   movementAngle: number | undefined;
-  serverPosition: { x: number; y: number } = { x: 0, y: 0 };
+  serverPosition: { x: number; y: number; tick: number } = {
+    x: 0,
+    y: 0,
+    tick: 0,
+  };
   packetSentAt = 0;
 
   playerEntities: {
@@ -175,6 +185,7 @@ export abstract class BaseScene extends Phaser.Scene {
     super(defaultedOptions.name);
 
     this.options = defaultedOptions;
+    this.eventManager = undefined;
   }
 
   private onAudioMuted = (event: CustomEvent) => {
@@ -248,6 +259,7 @@ export abstract class BaseScene extends Phaser.Scene {
    * Updates the shaders.
    */
   updateShaders = () => {
+    if (this.currentTick % 10 !== 0) return; // update every 10 ticks
     // get pipeline
     const nightShaderPipeline = this.cameras.main.getPostPipeline(
       "night",
@@ -336,6 +348,8 @@ export abstract class BaseScene extends Phaser.Scene {
       // this.physics.world.fixedStep = false; // activates sync
       // this.physics.world.fixedStep = true; // deactivates sync (default)
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error);
       errorLogger(JSON.stringify(error));
     }
 
@@ -491,21 +505,13 @@ export abstract class BaseScene extends Phaser.Scene {
 
     camera.setZoom(this.zoom);
 
-    // Center it on canvas
     const offsetX = (window.innerWidth - this.map.width * 4 * SQUARE_WIDTH) / 2;
     const offsetY =
       (window.innerHeight - this.map.height * 4 * SQUARE_WIDTH) / 2;
     camera.setPosition(Math.max(offsetX, 0), Math.max(offsetY, 0));
 
     camera.fadeIn(500);
-
-    camera.on(
-      "camerafadeincomplete",
-      () => {
-        this.isCameraFading = false;
-      },
-      this,
-    );
+    camera.on("camerafadeincomplete", () => (this.isCameraFading = false));
   }
 
   public initialiseMMO() {
@@ -519,60 +525,23 @@ export abstract class BaseScene extends Phaser.Scene {
     const server = this.mmoServer;
     if (!server) return;
 
-    const removeMessageListener = server.state.messages.onAdd((message) => {
-      // Old message
-      if (message.sentAt < Date.now() - 5000) {
-        return;
-      }
-
-      if (message.sceneId !== this.options.name) {
-        return;
-      }
-
-      if (!this.scene?.isActive()) {
-        return;
-      }
-
-      if (this.playerEntities[message.sessionId]) {
-        this.playerEntities[message.sessionId].speak(message.text);
-      } else if (message.sessionId === server.sessionId) {
-        this.currentPlayer?.speak(message.text);
-      }
-    });
-
-    const removeReactionListener = server.state.reactions.onAdd((reaction) => {
-      // Old message
-      if (reaction.sentAt < Date.now() - 5000) {
-        return;
-      }
-
-      if (reaction.sceneId !== this.options.name) {
-        return;
-      }
-
-      if (!this.scene?.isActive()) {
-        return;
-      }
-
-      if (this.playerEntities[reaction.sessionId]) {
-        this.playerEntities[reaction.sessionId].react(
-          reaction.reaction,
-          reaction.quantity,
-        );
-      } else if (reaction.sessionId === server.sessionId) {
-        this.currentPlayer?.react(reaction.reaction, reaction.quantity);
-      }
-    });
-
-    // send the scene player is in
-    // this.room.send()
+    this.eventManager = new EventManager(this);
 
     this.events.on("shutdown", () => {
-      removeMessageListener();
-      removeReactionListener();
-
       window.removeEventListener(AUDIO_MUTED_EVENT as any, this.onAudioMuted);
+      window.removeEventListener(
+        PLAZA_SHADER_EVENT as any,
+        this.onSetPlazaShader,
+      );
+      this.eventManager?.destroy();
     });
+  }
+
+  public calculateDistanceBetweenPlayers(
+    player1: BumpkinContainer,
+    player2: BumpkinContainer,
+  ) {
+    return Phaser.Math.Distance.BetweenPoints(player1, player2);
   }
 
   public initialiseSounds() {
@@ -812,7 +781,7 @@ export abstract class BaseScene extends Phaser.Scene {
     text: string;
     color?: string;
   }) {
-    const textObject = this.add.text(x, y + NAME_TAG_OFFSET_PX, text, {
+    const textObject = this.add.text(x, y + CONFIG.NAME_TAG_OFFSET_PX, text, {
       fontSize: "4px",
       fontFamily: "monospace",
       resolution: 4,
@@ -839,12 +808,19 @@ export abstract class BaseScene extends Phaser.Scene {
   update(): void {
     this.currentTick++;
 
+    const before = Date.now();
     this.switchScene();
     this.updatePlayer();
     this.updateOtherPlayers();
     this.updateShaders();
     this.updateUsernames();
-    this.updateFactions();
+    const after = Date.now();
+
+    const elapsed = after - before;
+    if (elapsed > 1000 / 60) {
+      // eslint-disable-next-line no-console
+      console.warn(`Update took too long: ${elapsed}ms`);
+    }
   }
 
   keysToAngle(
@@ -867,7 +843,7 @@ export abstract class BaseScene extends Phaser.Scene {
   get walkingSpeed() {
     if (this.isCameraFading) return 0;
 
-    return WALKING_SPEED;
+    return CONFIG.WALKING_SPEED;
   }
 
   updatePlayer() {
@@ -880,11 +856,7 @@ export abstract class BaseScene extends Phaser.Scene {
 
     if (this.currentPlayer.faction !== faction) {
       this.currentPlayer.faction = faction;
-      this.mmoServer?.send(0, { faction });
-      this.checkAndUpdateNameColor(
-        this.currentPlayer,
-        faction ? FACTION_NAME_COLORS[faction] : "white",
-      );
+      this.mmoServer?.send("player:faction:update", { faction });
     }
 
     // joystick is active if force is greater than zero
@@ -967,29 +939,26 @@ export abstract class BaseScene extends Phaser.Scene {
   }
 
   sendPositionToServer() {
-    if (!this.currentPlayer) {
-      return;
-    }
+    if (!this.currentPlayer) return;
 
-    // sync player position to server
-    if (
-      // Hasn't sent to server recently
-      Date.now() - this.packetSentAt > 1000 / SEND_PACKET_RATE &&
-      // Position has changed
-      (this.serverPosition.x !== this.currentPlayer.x ||
-        this.serverPosition.y !== this.currentPlayer.y)
-    ) {
-      this.serverPosition = {
-        x: this.currentPlayer.x,
-        y: this.currentPlayer.y,
-      };
+    // Check if enough time has passed since the last update
+    if (Date.now() - this.packetSentAt < 1000 / CONFIG.SEND_PACKET_RATE) return;
 
-      this.packetSentAt = Date.now();
+    // Only send if there is a significant change in position
+    const xDiff = Math.abs(this.currentPlayer.x - this.serverPosition.x);
+    const yDiff = Math.abs(this.currentPlayer.y - this.serverPosition.y);
+    if (xDiff < 1 && yDiff < 1) return;
 
-      const server = this.mmoServer;
-      if (server) {
-        server.send(0, this.serverPosition);
-      }
+    this.serverPosition = {
+      x: Number(this.currentPlayer.x.toFixed(2)),
+      y: Number(this.currentPlayer.y.toFixed(2)),
+      tick: this.currentTick,
+    };
+    this.packetSentAt = Date.now();
+
+    const server = this.mmoServer;
+    if (server) {
+      server.send("player:move", this.serverPosition);
     }
   }
 
@@ -997,23 +966,28 @@ export abstract class BaseScene extends Phaser.Scene {
     const server = this.mmoServer;
     if (!server) return;
 
-    // Destroy any dereferenced players
+    this.cleanupDisconnectedPlayers(server);
+    this.createOrUpdatePlayers(server);
+  }
+
+  private cleanupDisconnectedPlayers(server: Room<PlazaRoomState>) {
     Object.keys(this.playerEntities).forEach((sessionId) => {
+      const player = server.state.players.get(sessionId);
+
       if (
-        !server.state.players.get(sessionId) ||
-        server.state.players.get(sessionId)?.sceneId !== this.scene.key
-      )
+        !player ||
+        player.sceneId !== this.scene.key ||
+        !this.playerEntities[sessionId]?.active
+      ) {
         this.destroyPlayer(sessionId);
-      if (!this.playerEntities[sessionId]?.active)
-        this.destroyPlayer(sessionId);
+      }
     });
+  }
 
-    // Create new players
+  private createOrUpdatePlayers(server: Room<PlazaRoomState>) {
     server.state.players.forEach((player, sessionId) => {
-      // Skip the current player
-      if (sessionId === server.sessionId) return;
-
-      if (player.sceneId !== this.scene.key) return;
+      if (sessionId === server.sessionId || player.sceneId !== this.scene.key)
+        return;
 
       if (!this.playerEntities[sessionId]) {
         this.playerEntities[sessionId] = this.createPlayer({
@@ -1023,7 +997,7 @@ export abstract class BaseScene extends Phaser.Scene {
           username: player.username,
           faction: player.faction,
           clothing: player.clothing,
-          isCurrentPlayer: sessionId === server.sessionId,
+          isCurrentPlayer: false,
           npc: player.npc,
           experience: player.experience,
           sessionId,
@@ -1036,125 +1010,140 @@ export abstract class BaseScene extends Phaser.Scene {
     const server = this.mmoServer;
     if (!server) return;
 
-    // Update clothing
     server.state.players.forEach((player, sessionId) => {
-      if (this.playerEntities[sessionId]) {
+      if (
+        this.playerEntities[sessionId] &&
+        player.clothing !== this.clothingCache[sessionId]
+      ) {
         this.playerEntities[sessionId].changeClothing(player.clothing);
-      } else if (sessionId === server.sessionId) {
+        this.clothingCache[sessionId] = player.clothing;
+      } else if (
+        sessionId === server.sessionId &&
+        player.clothing !== this.clothingCache[sessionId]
+      ) {
         this.currentPlayer?.changeClothing(player.clothing);
+        this.clothingCache[sessionId] = player.clothing;
       }
     });
   }
 
   updateUsernames() {
+    if (this.currentTick % 30 !== 0) return; // Update every 30 frames
     const server = this.mmoServer;
     if (!server) return;
 
     server.state.players.forEach((player, sessionId) => {
-      if (this.playerEntities[sessionId]) {
-        const nameTag = this.playerEntities[sessionId].getByName("nameTag") as
-          | Phaser.GameObjects.Text
-          | undefined;
+      const entity = this.playerEntities[sessionId];
+      const nameTag = entity?.getByName("nameTag") as Phaser.GameObjects.Text;
+      const faction = player.faction;
+      const color = faction ? FACTION_NAME_COLORS[faction] : "#fff";
 
-        if (nameTag && player.username && nameTag.text !== player.username) {
-          nameTag.setText(player.username);
-        }
-      } else if (sessionId === server.sessionId) {
-        const nameTag = this.currentPlayer?.getByName("nameTag") as
-          | Phaser.GameObjects.Text
-          | undefined;
+      if (nameTag && player.username && nameTag.text !== player.username) {
+        nameTag.setText(player.username);
+      }
 
-        if (nameTag && player.username && nameTag.text !== player.username) {
-          nameTag.setText(player.username);
-        }
+      if (nameTag && nameTag.style.color !== color) {
+        nameTag.setColor(color);
       }
     });
   }
 
-  checkAndUpdateNameColor(entity: BumpkinContainer, color: string) {
-    const nameTag = entity.getByName("nameTag") as
-      | Phaser.GameObjects.Text
-      | undefined;
-
-    if (nameTag && nameTag.style.color !== color) {
-      nameTag.setColor(color);
-    }
-  }
-
-  updateFactions() {
-    const server = this.mmoServer;
-    if (!server) return;
-
-    server.state.players.forEach((player, sessionId) => {
-      if (!player.faction) return;
-
-      if (this.playerEntities[sessionId]) {
-        const faction = player.faction;
-        const color = faction
-          ? FACTION_NAME_COLORS[faction as FactionName]
-          : "#fff";
-
-        this.checkAndUpdateNameColor(this.playerEntities[sessionId], color);
-      }
-    });
-  }
-
+  // TODO: Refactor this, it's a mess, a working mess at least
   renderPlayers() {
     const server = this.mmoServer;
     if (!server) return;
 
-    const playerInVIP = this.physics.world.overlap(
+    const currentTime = Date.now();
+
+    const isPlayerInHiddenColliders = this.physics.world.overlap(
       this.hiddenColliders as Phaser.GameObjects.Group,
       this.currentPlayer,
     );
 
-    // Render current players
     server.state.players.forEach((player, sessionId) => {
-      if (sessionId === server.sessionId) return;
-
-      if (this.otherDiggers.has(sessionId)) return;
+      if (sessionId === server.sessionId || this.otherDiggers.has(sessionId))
+        return;
 
       const entity = this.playerEntities[sessionId];
-
-      // Skip if the player hasn't been set up yet
       if (!entity?.active) return;
+
+      const isEntityInHiddenColliders = this.physics.world.overlap(
+        this.hiddenColliders as Phaser.GameObjects.Group,
+        entity,
+      );
+
+      const hidden = !isPlayerInHiddenColliders && isEntityInHiddenColliders;
+      if (hidden === entity.visible) {
+        entity.setVisible(!hidden);
+      }
+
+      // Initialize previous position if it doesn't exist
+      if (!entity.previousPosition) {
+        entity.previousPosition = {
+          x: player.x,
+          y: player.y,
+          timestamp: currentTime,
+        };
+        return;
+      }
+
+      // Calculate time delta (in seconds) for velocity calculation
+      const timeDelta =
+        (currentTime - entity.previousPosition.timestamp) / 1000;
+
+      // Calculate velocity (simple estimation)
+      const velocityX = (player.x - entity.previousPosition.x) / timeDelta;
+      const velocityY = (player.y - entity.previousPosition.y) / timeDelta;
+
+      // Predict next position based on current velocity
+      const predictedX = player.x + velocityX * CONFIG.PREDICTION_TIME;
+      const predictedY = player.y + velocityY * CONFIG.PREDICTION_TIME;
+
+      // Smoothly interpolate towards predicted position
+      entity.x = Phaser.Math.Linear(
+        entity.x,
+        predictedX,
+        CONFIG.INTERPOLATION_RATE,
+      );
+      entity.y = Phaser.Math.Linear(
+        entity.y,
+        predictedY,
+        CONFIG.INTERPOLATION_RATE,
+      );
+      entity.setDepth(entity.y);
+
+      // Update movement state (idle/walk) based on distance to server position
+      const distanceToServer = Phaser.Math.Distance.Between(
+        entity.x,
+        entity.y,
+        player.x,
+        player.y,
+      );
 
       if (player.x > entity.x) {
         entity.faceRight();
-      } else if (player.x < entity.x) {
+      } else {
         entity.faceLeft();
       }
 
-      const distance = Phaser.Math.Distance.BetweenPoints(player, entity);
-
-      if (distance < 2) {
+      if (distanceToServer < 2) {
         entity.idle();
       } else {
         entity.walk();
       }
 
-      entity.x = Phaser.Math.Linear(entity.x, player.x, 0.05);
-      entity.y = Phaser.Math.Linear(entity.y, player.y, 0.05);
-
-      entity.setDepth(entity.y);
-
-      // Hide if in club house
-      const overlap = this.physics.world.overlap(
-        this.hiddenColliders as Phaser.GameObjects.Group,
-        entity,
-      );
-
-      const hidden = !playerInVIP && overlap;
-
-      // Check if player is in area as well
-      if (hidden === entity.visible) {
-        entity.setVisible(!hidden);
-      }
+      // Update previous position for next frame's velocity calculation
+      entity.previousPosition = {
+        x: player.x,
+        y: player.y,
+        timestamp: currentTime,
+      };
     });
   }
 
   switchScene() {
     if (this.switchToScene) {
+      const current = this.scene.key as SceneId;
       const warpTo = this.switchToScene;
       this.switchToScene = undefined;
 
@@ -1163,15 +1152,26 @@ export abstract class BaseScene extends Phaser.Scene {
 
       // this.mmoService?.state.context.server?.send(0, { sceneId: warpTo });
       this.mmoService?.send("SWITCH_SCENE", { sceneId: warpTo });
+      this.mmoService?.send("UPDATE_PREVIOUS_SCENE", {
+        previousSceneId: current,
+      });
     }
   }
+
   updateOtherPlayers() {
     const server = this.mmoServer;
     if (!server) return;
 
-    this.syncPlayers();
-    this.updateClothing();
-    this.renderPlayers();
+    // Only sync & update clothing every few frames to reduce computation
+    if (this.currentTick % 5 === 0) {
+      this.syncPlayers();
+      this.updateClothing();
+    }
+
+    // And render players more frequently but still not every frame
+    if (this.currentTick % 3 === 0) {
+      this.renderPlayers();
+    }
   }
 
   checkDistanceToSprite(

@@ -10,6 +10,12 @@ const randomXOffset = Math.random() * 60;
 const randomYOffset = Math.random() * 20;
 
 export const SPAWNS: () => SpawnLocation = () => ({
+  phaser_preloader_scene: {
+    default: {
+      x: 400 + randomXOffset,
+      y: 450 - randomYOffset,
+    },
+  },
   portal_example: {
     default: {
       x: 400 + randomXOffset,
@@ -153,6 +159,18 @@ export const SPAWNS: () => SpawnLocation = () => ({
     default: {
       x: 30,
       y: 290,
+    },
+  },
+  examples_animations: {
+    default: {
+      x: 400 + randomXOffset,
+      y: 450 - randomYOffset,
+    },
+  },
+  examples_rpg: {
+    default: {
+      x: 400 + randomXOffset,
+      y: 450 - randomYOffset,
     },
   },
 });

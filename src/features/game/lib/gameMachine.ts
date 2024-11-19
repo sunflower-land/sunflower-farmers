@@ -74,7 +74,7 @@ import { mmoBus } from "features/world/mmoMachine";
 import { onboardingAnalytics } from "lib/onboardingAnalytics";
 import { BudName } from "../types/buds";
 import { gameAnalytics } from "lib/gameAnalytics";
-import { portal } from "features/world/ui/community/actions/portal";
+import { portal } from "features/world/ui/portals/actions/portal";
 import { listRequest } from "../actions/listTrade";
 import { deleteListingRequest } from "../actions/deleteListing";
 import { fulfillTradeListingRequest } from "../actions/fulfillTradeListing";
@@ -138,7 +138,7 @@ export interface Context {
   announcements: Announcements;
   auctionResults?: AuctionResults;
   promoCode?: string;
-  moderation: Moderation;
+  moderation: Moderation[];
   saveQueued: boolean;
   linkedWallet?: string;
   wallet?: string;
@@ -152,17 +152,14 @@ export interface Context {
 }
 
 export type Moderation = {
-  muted: {
-    mutedAt: number;
-    mutedBy: number;
-    reason: string;
-    mutedUntil: number;
-  }[];
-  kicked: {
-    kickedAt: number;
-    kickedBy: number;
-    reason: string;
-  }[];
+  type: "mute" | "kick" | "delete_message" | "unmute";
+  farmId: number;
+  authorId: number;
+
+  arg: string;
+  createdAt: number;
+  expiresAt?: number;
+  deletedAt?: number;
 };
 
 type CommunityEvent = {
@@ -636,10 +633,7 @@ export function startGame(authContext: AuthContext) {
         state: EMPTY,
         sessionId: INITIAL_SESSION,
         announcements: {},
-        moderation: {
-          muted: [],
-          kicked: [],
-        },
+        moderation: [],
         saveQueued: false,
         verified: !CONFIG.API_URL,
         purchases: [],
@@ -1737,12 +1731,10 @@ export function startGame(authContext: AuthContext) {
                     state: event.data.farm,
                   })),
                   (_, event) => {
-                    mmoBus.send({
-                      trade: {
-                        buyerId: event.data.buyerId,
-                        sellerId: event.data.sellerId,
-                        tradeId: event.data.listingId,
-                      },
+                    mmoBus.send("trade:bought", {
+                      buyerId: event.data.buyerId,
+                      sellerId: event.data.sellerId,
+                      tradeId: event.data.listingId,
                     });
                   },
                 ],
