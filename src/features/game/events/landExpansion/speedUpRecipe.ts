@@ -3,6 +3,7 @@ import { BuildingName } from "features/game/types/buildings";
 import { getKeys } from "features/game/types/decorations";
 import { GameState } from "features/game/types/game";
 import { produce } from "immer";
+import { hasFeatureAccess } from "lib/flags";
 
 export type InstantCookRecipe = {
   type: "recipe.spedUp";
@@ -93,6 +94,9 @@ export function speedUpRecipe({
   createdAt = Date.now(),
 }: Options): GameState {
   return produce(state, (game) => {
+    if (hasFeatureAccess(game, "GEM_BOOSTS")) {
+      throw new Error("You do not have access!");
+    }
     const building = game.buildings[action.buildingName]?.find(
       (b) => b.id === action.buildingId,
     );

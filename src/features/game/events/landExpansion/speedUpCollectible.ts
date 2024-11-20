@@ -3,6 +3,7 @@ import { produce } from "immer";
 import { CollectibleName } from "features/game/types/craftables";
 import Decimal from "decimal.js-light";
 import { getInstantGems, makeGemHistory } from "./speedUpRecipe";
+import { hasFeatureAccess } from "lib/flags";
 
 export type SpeedUpCollectible = {
   type: "collectible.spedUp";
@@ -22,6 +23,10 @@ export function speedUpCollectible({
   createdAt = Date.now(),
 }: Options): GameState {
   return produce(state, (game) => {
+    if (hasFeatureAccess(game, "GEM_BOOSTS")) {
+      throw new Error("You do not have access!");
+    }
+
     const collectible = game.collectibles[action.name]?.find(
       (item) => item.id === action.id,
     );

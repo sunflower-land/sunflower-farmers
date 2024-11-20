@@ -3,6 +3,7 @@ import { produce } from "immer";
 import Decimal from "decimal.js-light";
 import { getInstantGems, makeGemHistory } from "./speedUpRecipe";
 import { BuildingName } from "features/game/types/buildings";
+import { hasFeatureAccess } from "lib/flags";
 
 export type SpeedUpBuilding = {
   type: "building.spedUp";
@@ -22,6 +23,10 @@ export function speedUpBuilding({
   createdAt = Date.now(),
 }: Options): GameState {
   return produce(state, (game) => {
+    if (hasFeatureAccess(game, "GEM_BOOSTS")) {
+      throw new Error("You do not have access!");
+    }
+
     const building = game.buildings[action.name]?.find(
       (item) => item.id === action.id,
     );

@@ -2,6 +2,7 @@ import { GameState } from "features/game/types/game";
 import { produce } from "immer";
 import { getInstantGems, makeGemHistory } from "./speedUpRecipe";
 import Decimal from "decimal.js-light";
+import { hasFeatureAccess } from "lib/flags";
 
 export type InstantExpand = {
   type: "expansion.spedUp";
@@ -20,6 +21,10 @@ export function speedUpExpansion({
 }: Options): GameState {
   return produce(state, (game) => {
     const expansion = game.expansionConstruction;
+
+    if (hasFeatureAccess(game, "GEM_BOOSTS")) {
+      throw new Error("You do not have access!");
+    }
 
     if (!expansion) {
       throw new Error("Expansion not in progress");
