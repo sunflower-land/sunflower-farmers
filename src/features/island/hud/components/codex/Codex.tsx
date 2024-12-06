@@ -24,6 +24,7 @@ import { useSound } from "lib/utils/hooks/useSound";
 
 import factions from "assets/icons/factions.webp";
 import chores from "assets/icons/chores.webp";
+import lightning from "assets/icons/lightning.png";
 import { Leaderboards } from "features/game/expansion/components/leaderboard/actions/cache";
 import { fetchLeaderboardData } from "features/game/expansion/components/leaderboard/actions/leaderboard";
 import { FactionLeaderboard } from "./pages/FactionLeaderboard";
@@ -35,6 +36,7 @@ import {
 import { hasFeatureAccess } from "lib/flags";
 import { ChoreBoard } from "./pages/ChoreBoard";
 import { FLOWERS } from "features/game/types/flowers";
+import { Boosts } from "./pages/Boosts";
 
 interface Props {
   show: boolean;
@@ -129,6 +131,11 @@ export const Codex: React.FC<Props> = ({ show, onHide }) => {
     ).length ?? 0;
 
   const categories: CodexCategory[] = [
+    {
+      name: "Boosts",
+      icon: lightning,
+      count: 0,
+    },
     {
       name: "Deliveries",
       icon: SUNNYSIDE.icons.player,
@@ -242,8 +249,9 @@ export const Codex: React.FC<Props> = ({ show, onHide }) => {
                 "overflow-y-auto scrollable": currentTab !== 5,
               })}
             > */}
-            {currentTab === 0 && <Deliveries onClose={onHide} />}
-            {currentTab === 1 && (
+            {currentTab === 0 && <Boosts />}
+            {currentTab === 1 && <Deliveries onClose={onHide} />}
+            {currentTab === 2 && (
               <>
                 {hasFeatureAccess(state, "CHORE_BOARD") ? (
                   <ChoreBoard />
@@ -252,7 +260,7 @@ export const Codex: React.FC<Props> = ({ show, onHide }) => {
                 )}
               </>
             )}
-            {currentTab === 2 && (
+            {currentTab === 3 && (
               <Season
                 id={id}
                 isLoading={data?.tickets === undefined}
@@ -260,14 +268,14 @@ export const Codex: React.FC<Props> = ({ show, onHide }) => {
                 season={getCurrentSeason()}
               />
             )}
-            {currentTab === 3 && (
+            {currentTab === 4 && (
               <Fish onMilestoneReached={handleMilestoneReached} />
             )}
-            {currentTab === 4 && (
+            {currentTab === 5 && (
               <Flowers onMilestoneReached={handleMilestoneReached} />
             )}
 
-            {currentTab === 5 && state.faction && (
+            {currentTab === 6 && state.faction && (
               <FactionLeaderboard
                 leaderboard={data?.kingdom ?? null}
                 isLoading={data?.kingdom === undefined}

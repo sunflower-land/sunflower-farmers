@@ -1,26 +1,10 @@
 import { SeasonName } from "features/game/types/seasons";
 import { BuffLabel } from ".";
 
-export type CodexCategoryName =
-  | "Fish"
-  | "Flowers"
-  | "Season"
-  | "Bull Run"
-  | "Deliveries"
-  | "Chores"
-  | "Bumpkins"
-  | "Farming"
-  | "Treasures"
-  | "Leaderboard"
-  | "Factions"
-  | "Minigames"
-  | "Marks"
-  | "Chore Board";
-
 export type CollectionGroup = "fish";
 
 export interface CodexCategory {
-  name: CodexCategoryName;
+  name: string;
   icon: string;
   disabled?: boolean;
   count: number;

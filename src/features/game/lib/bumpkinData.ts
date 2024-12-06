@@ -22,10 +22,11 @@ export const TEST_BUMPKIN: Bumpkin = {
     pants: "Brown Suspenders",
 
     shoes: "Black Farmer Boots",
-    tool: "Farmer Pitchfork",
+    tool: "Crimstone Hammer",
     background: "Farm Background",
     beard: "Santa Beard",
     hat: "Deep Sea Helm",
+    necklace: "Green Amulet",
   },
   skills: {},
   achievements: {},
