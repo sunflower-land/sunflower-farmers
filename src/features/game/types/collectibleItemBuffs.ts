@@ -1,4 +1,3 @@
-import { InventoryItemName } from "./game";
 import { BuffLabel } from ".";
 import powerup from "assets/icons/level_up.png";
 import lightning from "assets/icons/lightning.png";
@@ -7,9 +6,10 @@ import { CROP_LIFECYCLE } from "features/island/plots/lib/plant";
 import { SUNNYSIDE } from "assets/sunnyside";
 import { ITEM_DETAILS } from "./images";
 import { translate } from "lib/i18n/translate";
+import { CollectibleName } from "./craftables";
 
 export const COLLECTIBLE_BUFF_LABELS: Partial<
-  Record<InventoryItemName, BuffLabel>
+  Record<CollectibleName, BuffLabel>
 > = {
   Miffy: {
     shortDescription: translate("miffy.boost"),
@@ -479,11 +479,6 @@ export const COLLECTIBLE_BUFF_LABELS: Partial<
     labelType: "vibrant",
     boostTypeIcon: lightning,
     boostedItemIcon: ITEM_DETAILS["Red Pansy"].image,
-  },
-  Beehive: {
-    shortDescription: translate("description.beehive.boost"),
-    labelType: "vibrant",
-    boostTypeIcon: lightning,
   },
   "Pharaoh Chicken": {
     shortDescription: translate("description.pharaoh.chicken.boost"),
