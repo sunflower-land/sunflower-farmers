@@ -1307,8 +1307,7 @@ export interface GameState {
     tornado?: CalendarEvent;
   };
   vip?: {
-    bundle: VipBundle;
-    boughtAt: number;
+    bundles: { name: VipBundle; boughtAt: number }[];
     expiresAt: number;
   };
 
