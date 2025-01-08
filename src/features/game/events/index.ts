@@ -422,20 +422,15 @@ import {
 } from "./landExpansion/redeemTradeReward";
 import { collectCandy, CollectCandyAction } from "./landExpansion/collectCandy";
 import { skillUse, SkillUseAction } from "./landExpansion/skillUsed";
-<<<<<<< HEAD
 import {
   triggerTornado,
   TriggerTornadoAction,
 } from "./landExpansion/triggerTornado";
-
-export type PlayingEvent =
-  | TriggerTornadoAction
-=======
 import { purchaseVIP, PurchaseVIPAction } from "./landExpansion/vipPurchased";
 
 export type PlayingEvent =
+  | TriggerTornadoAction
   | PurchaseVIPAction
->>>>>>> 95f2a4cc0 ([FEAT] Event polish)
   | SellAnimalAction
   | SpeedUpBuilding
   | SacrificeBearAction
@@ -631,11 +626,8 @@ type Handlers<T> = {
 };
 
 export const PLAYING_EVENTS: Handlers<PlayingEvent> = {
-<<<<<<< HEAD
   "tornado.triggered": triggerTornado,
-=======
   "vip.purchased": purchaseVIP,
->>>>>>> 95f2a4cc0 ([FEAT] Event polish)
   "animal.sold": sellAnimal,
   "building.spedUp": speedUpBuilding,
   "bear.sacrificed": sacrificeBear,
