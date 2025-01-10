@@ -79,6 +79,7 @@ const featureFlags = {
   }),
   WEATHER_SHOP: testnetFeatureFlag,
   FRUIT_PATCH_QUICK_SELECT: defaultFeatureFlag,
+  REPUTATION_SYSTEM: testnetFeatureFlag,
 } satisfies Record<string, FeatureFlag>;
 
 export type FeatureName = keyof typeof featureFlags;

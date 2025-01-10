@@ -426,9 +426,11 @@ import {
   triggerTornado,
   TriggerTornadoAction,
 } from "./landExpansion/triggerTornado";
+import { purchaseVIP, PurchaseVIPAction } from "./landExpansion/vipPurchased";
 
 export type PlayingEvent =
   | TriggerTornadoAction
+  | PurchaseVIPAction
   | SellAnimalAction
   | SpeedUpBuilding
   | SacrificeBearAction
@@ -625,6 +627,7 @@ type Handlers<T> = {
 
 export const PLAYING_EVENTS: Handlers<PlayingEvent> = {
   "tornado.triggered": triggerTornado,
+  "vip.purchased": purchaseVIP,
   "animal.sold": sellAnimal,
   "building.spedUp": speedUpBuilding,
   "bear.sacrificed": sacrificeBear,
