@@ -6,11 +6,13 @@ import { DeliveryPanelContent } from "../deliveries/DeliveryPanelContent";
 import { SpeakingModal } from "features/game/components/SpeakingModal";
 import { useRandomItem } from "lib/utils/hooks/useRandomItem";
 import { defaultDialogue, npcDialogues } from "../deliveries/dialogues";
-import { useActor } from "@xstate/react";
-import { Context } from "features/game/GameProvider";
 import { ITEM_DETAILS } from "features/game/types/images";
 import { BumpkinItem, ITEM_IDS } from "features/game/types/bumpkin";
-import { CurrentObsession, InventoryItemName } from "features/game/types/game";
+import {
+  CurrentObsession,
+  GameState,
+  InventoryItemName,
+} from "features/game/types/game";
 
 import { Label } from "components/ui/Label";
 import { Button } from "components/ui/Button";
@@ -20,6 +22,12 @@ import { useAppTranslation } from "lib/i18n/useAppTranslations";
 import { translate } from "lib/i18n/translate";
 import { getImageUrl } from "lib/utils/getImageURLS";
 import { OuterPanel } from "components/ui/Panel";
+import {
+  MachineInterpreter,
+  MachineState,
+} from "features/game/lib/gameMachine";
+import { Context } from "features/game/GameProvider";
+import { useSelector } from "@xstate/react";
 
 const host = window.location.host.replace(/^www\./, "");
 const LOCAL_STORAGE_KEY = `bert-read.${host}-${window.location.pathname}`;
@@ -35,6 +43,8 @@ function hasReadIntro() {
 interface Props {
   onClose: () => void;
 }
+
+const _state = (state: MachineState) => state.context.state;
 
 const obsessionDialogues = (itemName: string) => [
   `${translate("obsessionDialogue.line1", {
@@ -65,6 +75,8 @@ export const Bert: React.FC<Props> = ({ onClose }) => {
   const [showIntro, setShowIntro] = useState(!hasReadIntro());
   const dialogue = npcDialogues.bert || defaultDialogue;
   const intro = useRandomItem(dialogue.intro);
+  const { gameService } = useContext(Context);
+  const state = useSelector(gameService, _state);
 
   const handleIntro = (tab: number) => {
     setShowIntro(false);
@@ -109,21 +121,17 @@ export const Bert: React.FC<Props> = ({ onClose }) => {
       currentTab={tab}
     >
       {tab === 0 && <DeliveryPanelContent npc="bert" />}
-      {tab === 1 && <BertObsession />}
+      {tab === 1 && <BertObsession gameService={gameService} state={state} />}
     </CloseButtonPanel>
   );
 };
 
-export const BertObsession: React.FC<{ readonly?: boolean }> = ({
-  readonly,
-}) => {
+export const BertObsession: React.FC<{
+  readonly?: boolean;
+  gameService: MachineInterpreter;
+  state: GameState;
+}> = ({ readonly, gameService, state }) => {
   const { t } = useAppTranslation();
-  const { gameService } = useContext(Context);
-  const [
-    {
-      context: { state },
-    },
-  ] = useActor(gameService);
   const currentObsession = state.bertObsession;
   const obsessionCompletedAt = state.npcs?.bert?.questCompletedAt;
 
@@ -185,7 +193,7 @@ export const BertObsession: React.FC<{ readonly?: boolean }> = ({
             <div className="absolute inset-0">
               <img
                 src={image}
-                className="absolute w-1/2 z-20 object-cover mb-2 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                className={`absolute ${isObsessionCollectible ? "w-1/2" : "w-full"} z-20 object-cover mb-2 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2`}
               />
             </div>
           </div>
@@ -201,6 +209,8 @@ export const BertObsession: React.FC<{ readonly?: boolean }> = ({
         isObsessionCollectible={isObsessionCollectible}
         obsessionName={obsessionName}
         currentObsession={currentObsession}
+        gameService={gameService}
+        state={state}
       />
     </div>
   );
@@ -210,14 +220,16 @@ const CompleteObsession: React.FC<{
   isObsessionCollectible: boolean;
   obsessionName?: string;
   currentObsession?: CurrentObsession;
-}> = ({ isObsessionCollectible, obsessionName, currentObsession }) => {
+  gameService: MachineInterpreter;
+  state: GameState;
+}> = ({
+  isObsessionCollectible,
+  obsessionName,
+  currentObsession,
+  gameService,
+  state,
+}) => {
   const { t } = useAppTranslation();
-  const { gameService } = useContext(Context);
-  const [
-    {
-      context: { state },
-    },
-  ] = useActor(gameService);
   const obsessionCompletedAt = state.npcs?.bert?.questCompletedAt;
   const reward = state.bertObsession?.reward ?? 0;
 
@@ -311,7 +323,7 @@ const BertObsessionReadonly: React.FC<{
           >
             <img
               src={image}
-              className="absolute w-1/2 z-20 object-cover mb-2 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+              className={`absolute ${isObsessionCollectible ? "w-1/2" : "w-full"} z-20 object-cover mb-2 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2`}
             />
           </div>
           <div className="flex flex-col space-y-2 justify-between">
